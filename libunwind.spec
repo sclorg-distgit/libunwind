@@ -7,7 +7,7 @@
 Summary: An unwinding library
 Name: %{?scl_prefix}libunwind
 Version: 1.2
-Release: 2%{?dist}
+Release: 3%{?dist}
 License: BSD
 Group: Development/Debuggers
 Source: http://download-mirror.savannah.gnu.org/releases/libunwind/libunwind-%{version}.tar.gz
@@ -21,6 +21,10 @@ BuildRequires: automake libtool autoconf
 
 # host != target would cause REMOTE_ONLY build even if building i386 on x86_64.
 %global _host %{_target_platform}
+
+# we don't want to require or provide any pkgconfig(xxx) symbols
+%global __pkgconfig_requires ""
+%global __pkgconfig_provides ""
 
 
 %description
@@ -47,19 +51,29 @@ set -ex
 
 
 %build
+%{?scl_prefix:export verstring_prefix="%{scl_prefix}"}
 %{?scl:scl enable %{scl} - << \EOF}
 set -ex
 aclocal
 libtoolize --force
+
+# we need to patch ltmain in order to provide prefixed soname,
+# so symlink doesn't work for us
+unlink config/ltmain.sh
+sed -e 's|major=.$func_arith_result|major=.$verstring_prefix$func_arith_result|g' \
+    /usr/share/libtool/config/ltmain.sh > config/ltmain.sh
+
 autoheader
 automake --add-missing
 autoconf
+
 %configure --enable-static --enable-shared --enable-setjmp=no
 make %{?_smp_mflags}
 %{?scl:EOF}
 
 
 %install
+%{?scl_prefix:export verstring_prefix="%{scl_prefix}"}
 %{?scl:scl enable %{scl} - << \EOF}
 set -ex
 make install DESTDIR=$RPM_BUILD_ROOT
@@ -111,6 +125,10 @@ echo ====================TESTSUITE DISABLED=========================
 
 
 %changelog
+* Thu Jun 15 2017 Marek Skalický <mskalick@redhat.com> - 1.2-3
+- Add SCL name into soname
+- Remove pkgconfig provides (don't contain SCL name)
+
 * Wed Jun 14 2017 Marek Skalický <mskalick@redhat.com> - 1.2-2
 - Rebase to libunwind 1.2 from Fedora 27 and convert it to SCL
 - Do not install man pages - latex2man is not RHEL and it is needed
